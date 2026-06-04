@@ -17,6 +17,7 @@ app.setName(appid);
 app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps', appid));
 
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
+app.commandLine.appendSwitch('class', appid);
 
 const TITLEBAR_HEIGHT = 36;
 // Rounded corners and bottom border gated on .w-corner class; toggled via executeJavaScript
