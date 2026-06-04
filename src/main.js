@@ -44,6 +44,23 @@ function cornerBorderCss(color) {
     `pointer-events:none;z-index:2147483647;}`;
 }
 
+function applyCornerCSS() {
+  contentView.webContents.insertCSS(CORNER_CSS).then(k => {
+    if (mainWin.isMaximized() || mainWin.isFullScreen()) {
+      contentView.webContents.removeInsertedCSS(k).catch(() => {});
+    } else {
+      cornerCssKey = k;
+    }
+  }).catch(() => {});
+  contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => {
+    if (mainWin.isMaximized() || mainWin.isFullScreen()) {
+      contentView.webContents.removeInsertedCSS(k).catch(() => {});
+    } else {
+      cornerBorderCssKey = k;
+    }
+  }).catch(() => {});
+}
+
 async function updateCornerBorder(color) {
   currentBorderColor = color;
   if (!contentView || contentView.webContents.isDestroyed()) return;
@@ -52,9 +69,13 @@ async function updateCornerBorder(color) {
       await contentView.webContents.removeInsertedCSS(cornerBorderCssKey).catch(() => {});
       cornerBorderCssKey = null;
     }
-    contentView.webContents.insertCSS(cornerBorderCss(color))
-      .then(k => { cornerBorderCssKey = k; })
-      .catch(() => {});
+    contentView.webContents.insertCSS(cornerBorderCss(color)).then(k => {
+      if (mainWin.isMaximized() || mainWin.isFullScreen()) {
+        contentView.webContents.removeInsertedCSS(k).catch(() => {});
+      } else {
+        cornerBorderCssKey = k;
+      }
+    }).catch(() => {});
   }
 }
 
