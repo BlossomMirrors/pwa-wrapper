@@ -19,11 +19,16 @@ app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps'
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 const TITLEBAR_HEIGHT = 36;
+// Rounded corners and bottom border gated on .w-corner class; toggled via executeJavaScript
+// so there are no async key-tracking races with insertCSS/removeInsertedCSS.
 const CORNER_CSS =
-  'html{overflow:hidden!important;height:100vh!important;' +
+  'html.w-corner{overflow:hidden!important;height:100vh!important;' +
   'clip-path:inset(0 0 0 0 round 0 0 19px 19px)!important;' +
   'background-color:rgba(0,0,0,0.001)!important;}' +
-  'body{overflow:auto!important;height:100%!important;}';
+  'html.w-corner body{overflow:auto!important;height:100%!important;}' +
+  'html.w-corner::after{content:\'\';position:absolute;inset:0;' +
+  'border:1px solid var(--w-border,rgba(255,255,255,0.12));border-top:none;' +
+  'border-radius:0 0 19px 19px;pointer-events:none;z-index:2147483647;}';
 const SCROLLBAR_CSS =
   '::-webkit-scrollbar{width:8px;height:8px}' +
   '::-webkit-scrollbar-track{background:transparent}' +
@@ -34,49 +39,22 @@ const SCROLLBAR_CSS =
   '::-webkit-scrollbar-corner{background:transparent}';
 let mainWin = null;
 let contentView = null;
-let cornerCssKey = null;
-let cornerBorderCssKey = null;
 let currentBorderColor = 'rgba(255,255,255,0.12)';
 
-function cornerBorderCss(color) {
-  return `html::after{content:'';position:absolute;inset:0;` +
-    `border:1px solid ${color};border-top:none;border-radius:0 0 19px 19px;` +
-    `pointer-events:none;z-index:2147483647;}`;
+function syncCornerClass() {
+  if (!contentView || contentView.webContents.isDestroyed()) return;
+  const windowed = !mainWin.isMaximized() && !mainWin.isFullScreen();
+  contentView.webContents.executeJavaScript(
+    `document.documentElement.classList[${JSON.stringify(windowed ? 'add' : 'remove')}]('w-corner');void 0`
+  ).catch(() => {});
 }
 
-function applyCornerCSS() {
-  contentView.webContents.insertCSS(CORNER_CSS).then(k => {
-    if (mainWin.isMaximized() || mainWin.isFullScreen()) {
-      contentView.webContents.removeInsertedCSS(k).catch(() => {});
-    } else {
-      cornerCssKey = k;
-    }
-  }).catch(() => {});
-  contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => {
-    if (mainWin.isMaximized() || mainWin.isFullScreen()) {
-      contentView.webContents.removeInsertedCSS(k).catch(() => {});
-    } else {
-      cornerBorderCssKey = k;
-    }
-  }).catch(() => {});
-}
-
-async function updateCornerBorder(color) {
+function updateCornerBorder(color) {
   currentBorderColor = color;
   if (!contentView || contentView.webContents.isDestroyed()) return;
-  if (mainWin && !mainWin.isMaximized() && !mainWin.isFullScreen()) {
-    if (cornerBorderCssKey !== null) {
-      await contentView.webContents.removeInsertedCSS(cornerBorderCssKey).catch(() => {});
-      cornerBorderCssKey = null;
-    }
-    contentView.webContents.insertCSS(cornerBorderCss(color)).then(k => {
-      if (mainWin.isMaximized() || mainWin.isFullScreen()) {
-        contentView.webContents.removeInsertedCSS(k).catch(() => {});
-      } else {
-        cornerBorderCssKey = k;
-      }
-    }).catch(() => {});
-  }
+  contentView.webContents.executeJavaScript(
+    `document.documentElement.style.setProperty('--w-border',${JSON.stringify(color)});void 0`
+  ).catch(() => {});
 }
 
 app.whenReady().then(async () => {
@@ -139,41 +117,19 @@ async function createMainWindow() {
     mainWin.setBackgroundColor('#18181f');
     updateContentBounds();
     mainWin.webContents.send('window-maximized', true);
-    if (cornerCssKey !== null) {
-      contentView.webContents.removeInsertedCSS(cornerCssKey).catch(() => {});
-      cornerCssKey = null;
-    }
-    if (cornerBorderCssKey !== null) {
-      contentView.webContents.removeInsertedCSS(cornerBorderCssKey).catch(() => {});
-      cornerBorderCssKey = null;
-    }
+    syncCornerClass();
   });
   mainWin.on('unmaximize', () => {
     mainWin.setBackgroundColor('#00000000');
     updateContentBounds();
     mainWin.webContents.send('window-maximized', false);
-    if (!mainWin.isFullScreen()) {
-      contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
-      contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => { cornerBorderCssKey = k; }).catch(() => {});
-    }
+    syncCornerClass();
   });
 
   function applyFullscreen(isFullscreen) {
     mainWin.webContents.send('fullscreen', isFullscreen);
     mainWin.setBackgroundColor(isFullscreen ? '#000000' : '#00000000');
-    if (isFullscreen) {
-      if (cornerCssKey !== null) {
-        contentView.webContents.removeInsertedCSS(cornerCssKey).catch(() => {});
-        cornerCssKey = null;
-      }
-      if (cornerBorderCssKey !== null) {
-        contentView.webContents.removeInsertedCSS(cornerBorderCssKey).catch(() => {});
-        cornerBorderCssKey = null;
-      }
-    } else if (!mainWin.isMaximized()) {
-      contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
-      contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => { cornerBorderCssKey = k; }).catch(() => {});
-    }
+    syncCornerClass();
     updateContentBounds();
   }
   mainWin.on('enter-full-screen', () => applyFullscreen(true));
@@ -214,13 +170,13 @@ async function createMainWindow() {
 
   contentView.webContents.on('did-finish-load', async () => {
     sendNavState();
-    contentView.webContents.insertCSS(SCROLLBAR_CSS).catch(() => {});
-    cornerCssKey = null;
-    cornerBorderCssKey = null;
-    if (!mainWin.isMaximized() && !mainWin.isFullScreen()) {
-      contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
-      contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => { cornerBorderCssKey = k; }).catch(() => {});
-    }
+    await Promise.all([
+      contentView.webContents.insertCSS(SCROLLBAR_CSS),
+      contentView.webContents.insertCSS(CORNER_CSS),
+    ]).catch(() => {});
+    // Sync class and border color after CSS is in the renderer.
+    syncCornerClass();
+    updateCornerBorder(currentBorderColor);
     try { await inject.injectCSS(contentView.webContents, args.css); } catch {}
     try { await inject.injectJS(contentView.webContents, args.js); } catch {}
   });

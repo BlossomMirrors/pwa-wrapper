@@ -128,6 +128,7 @@
 
     let isDark = true;
     let cliColor = null;
+    let isMaximized = false;
 
     function luminance(color) {
       let r, g, b;
@@ -233,6 +234,7 @@
     window.electron.onThemeColor((color) => applyColor(color));
 
     window.electron.onMaximize((isMax) => {
+      isMaximized = isMax;
       btnMax.title = isMax ? 'Restore' : 'Maximize';
       titlebar.style.borderRadius = isMax ? '0' : '20px 20px 0 0';
       windowBorder.style.display = isMax ? 'none' : '';
@@ -246,7 +248,8 @@
 
     window.electron.onFullscreen((isFullscreen) => {
       titlebar.style.display = isFullscreen ? 'none' : '';
-      windowBorder.style.display = isFullscreen ? 'none' : '';
+      titlebar.style.borderRadius = (!isFullscreen && isMaximized) ? '0' : '20px 20px 0 0';
+      windowBorder.style.display = (isFullscreen || isMaximized) ? 'none' : '';
     });
   </script>
 </body>
