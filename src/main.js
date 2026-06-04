@@ -19,8 +19,10 @@ app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps'
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 const TITLEBAR_HEIGHT = 36;
+const BORDER_WIDTH = 1;
+// Inner clip radius = outer window radius − border width so corners are concentric.
 const CORNER_CSS =
-  'html{clip-path:inset(0 0 0 0 round 0 0 20px 20px)!important;}' +
+  'html{clip-path:inset(0 0 0 0 round 0 0 19px 19px)!important;}' +
   'html,body{background-color:transparent!important;}';
 let mainWin = null;
 let contentView = null;
@@ -81,6 +83,7 @@ async function createMainWindow() {
     },
   });
 
+  contentView.setBackgroundColor('#00000000');
   mainWin.contentView.addChildView(contentView);
   updateContentBounds();
 
@@ -99,8 +102,25 @@ async function createMainWindow() {
     mainWin.setBackgroundColor('#00000000');
     updateContentBounds();
     mainWin.webContents.send('window-maximized', false);
-    contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
+    if (!mainWin.isFullScreen())
+      contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
   });
+
+  function applyFullscreen(isFullscreen) {
+    mainWin.webContents.send('fullscreen', isFullscreen);
+    mainWin.setBackgroundColor(isFullscreen ? '#000000' : '#00000000');
+    if (isFullscreen && cornerCssKey !== null) {
+      contentView.webContents.removeInsertedCSS(cornerCssKey).catch(() => {});
+      cornerCssKey = null;
+    }
+    updateContentBounds();
+  }
+  mainWin.on('enter-full-screen', () => applyFullscreen(true));
+  mainWin.on('leave-full-screen', () => applyFullscreen(false));
+
+  // HTML5 fullscreen from inside the web app (e.g. video player fullscreen button).
+  contentView.webContents.on('enter-html-full-screen', () => { if (!mainWin.isFullScreen()) mainWin.setFullScreen(true); });
+  contentView.webContents.on('leave-html-full-screen',  () => { if (mainWin.isFullScreen())  mainWin.setFullScreen(false); });
 
   function sendNavState() {
     if (mainWin && !mainWin.isDestroyed()) {
@@ -135,7 +155,7 @@ async function createMainWindow() {
     sendNavState();
     contentView.webContents.insertCSS(SCROLLBAR_CSS).catch(() => {});
     cornerCssKey = null;
-    if (!mainWin.isMaximized()) {
+    if (!mainWin.isMaximized() && !mainWin.isFullScreen()) {
       contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
     }
     try { await inject.injectCSS(contentView.webContents, args.css); } catch {}
@@ -172,5 +192,13 @@ async function createMainWindow() {
 function updateContentBounds() {
   if (!mainWin || !contentView) return;
   const [w, h] = mainWin.getContentSize();
-  contentView.setBounds({ x: 0, y: TITLEBAR_HEIGHT, width: w, height: Math.max(0, h - TITLEBAR_HEIGHT) });
+  const fs = mainWin.isFullScreen();
+  const tbH = fs ? 0 : TITLEBAR_HEIGHT;
+  const bw = (fs || mainWin.isMaximized()) ? 0 : BORDER_WIDTH;
+  contentView.setBounds({
+    x: bw,
+    y: tbH,
+    width: Math.max(0, w - 2 * bw),
+    height: Math.max(0, h - tbH - bw),
+  });
 }

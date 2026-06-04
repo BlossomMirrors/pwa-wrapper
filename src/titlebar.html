@@ -14,6 +14,15 @@
       font-size: 12px;
     }
 
+    #window-border {
+      position: fixed;
+      inset: 0;
+      border: 1px solid transparent;
+      border-radius: 20px;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
     #titlebar {
       display: flex;
       align-items: center;
@@ -62,6 +71,7 @@
   </style>
 </head>
 <body>
+  <div id="window-border"></div>
   <div id="titlebar">
     <div class="title-left">
       <div class="nav-buttons">
@@ -105,6 +115,7 @@
   </div>
 
   <script>
+    const windowBorder = document.getElementById('window-border');
     const titlebar = document.getElementById('titlebar');
     const titleEl = document.getElementById('titlebar-title');
     const iconEl = document.getElementById('titlebar-icon');
@@ -163,6 +174,7 @@
       isDark = luminance(bg) < 0.5;
       titleEl.style.color = isDark ? '#ededf0' : '#18181f';
       updateAllStrokes();
+      windowBorder.style.borderColor = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
     }
 
     function setupButton(btn, type, action) {
@@ -199,12 +211,18 @@
     window.electron.onMaximize((isMax) => {
       btnMax.title = isMax ? 'Restore' : 'Maximize';
       titlebar.style.borderRadius = isMax ? '0' : '20px 20px 0 0';
+      windowBorder.style.display = isMax ? 'none' : '';
     });
 
     window.electron.onNavState(({ canGoBack, canGoForward }) => {
       btnBack.disabled = !canGoBack;
       btnFwd.disabled  = !canGoForward;
       updateAllStrokes();
+    });
+
+    window.electron.onFullscreen((isFullscreen) => {
+      titlebar.style.display = isFullscreen ? 'none' : '';
+      windowBorder.style.display = isFullscreen ? 'none' : '';
     });
   </script>
 </body>
