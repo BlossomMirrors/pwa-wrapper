@@ -4,9 +4,9 @@ const os = require('os');
 const path = require('path');
 
 const args = minimist(process.argv.slice(2), {
-  boolean: ['widevine', 'tray'],
+  boolean: ['widevine', 'tray', 'minimized'],
   string: ['url', 'name', 'color', 'css', 'js', 'appid', 'useragent', 'icon', 'url-filter'],
-  default: { widevine: false, tray: false },
+  default: { widevine: false, tray: false, minimized: false },
 });
 
 const appid = args.appid || 'default';
@@ -89,7 +89,11 @@ async function createMainWindow() {
 
   mainWin.webContents.on('did-finish-load', () => {
     mainWin.setContentSize(1280, 800);
-    if (!mainWin.isVisible()) mainWin.show();
+    if (!mainWin.isVisible()) {
+      if (args.minimized && args.tray) { /* stay hidden, tray-only */ }
+      else if (args.minimized) mainWin.minimize();
+      else mainWin.show();
+    }
     updateContentBounds();
     mainWin.webContents.send('titlebar-init', {
       name: args.name || '', color: args.color || null, icon: args.icon || null,
