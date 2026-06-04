@@ -21,6 +21,7 @@
       border-radius: 20px;
       pointer-events: none;
       z-index: 9999;
+      clip-path: inset(0 0 calc(100% - 36px) 0);
     }
 
     #titlebar {
@@ -168,13 +169,36 @@
       });
     }
 
+    function computeBorderColor(bg, dark) {
+      let r, g, b;
+      const rgb = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (rgb) { r = +rgb[1]; g = +rgb[2]; b = +rgb[3]; }
+      else if (bg.startsWith('#')) {
+        const h = bg.replace('#', '');
+        const full = h.length === 3 ? h.split('').map(c => c+c).join('') : h;
+        r = parseInt(full.slice(0,2),16); g = parseInt(full.slice(2,4),16); b = parseInt(full.slice(4,6),16);
+      } else { return dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'; }
+      if (dark) {
+        r = Math.round(r + (255-r)*0.25);
+        g = Math.round(g + (255-g)*0.25);
+        b = Math.round(b + (255-b)*0.25);
+      } else {
+        r = Math.round(r * 0.85);
+        g = Math.round(g * 0.85);
+        b = Math.round(b * 0.85);
+      }
+      return `rgb(${r},${g},${b})`;
+    }
+
     function applyColor(color) {
       const bg = color || cliColor || '#18181f';
       titlebar.style.backgroundColor = bg;
       isDark = luminance(bg) < 0.5;
       titleEl.style.color = isDark ? '#ededf0' : '#18181f';
       updateAllStrokes();
-      windowBorder.style.borderColor = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
+      const borderColor = computeBorderColor(bg, isDark);
+      windowBorder.style.borderColor = borderColor;
+      window.electron.updateBorderColor(borderColor);
     }
 
     function setupButton(btn, type, action) {

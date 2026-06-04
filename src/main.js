@@ -19,14 +19,44 @@ app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps'
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 const TITLEBAR_HEIGHT = 36;
-const BORDER_WIDTH = 1;
-// Inner clip radius = outer window radius − border width so corners are concentric.
 const CORNER_CSS =
-  'html{clip-path:inset(0 0 0 0 round 0 0 19px 19px)!important;}' +
-  'html,body{background-color:transparent!important;}';
+  'html{overflow:hidden!important;height:100vh!important;' +
+  'clip-path:inset(0 0 0 0 round 0 0 19px 19px)!important;' +
+  'background-color:rgba(0,0,0,0.001)!important;}' +
+  'body{overflow:auto!important;height:100%!important;}';
+const SCROLLBAR_CSS =
+  '::-webkit-scrollbar{width:8px;height:8px}' +
+  '::-webkit-scrollbar-track{background:transparent}' +
+  '::-webkit-scrollbar-thumb{background:rgba(128,128,128,0.5);border-radius:4px;' +
+  'border:2px solid transparent;background-clip:content-box}' +
+  '::-webkit-scrollbar-thumb:hover{background:rgba(128,128,128,0.7);border-radius:4px;' +
+  'border:2px solid transparent;background-clip:content-box}' +
+  '::-webkit-scrollbar-corner{background:transparent}';
 let mainWin = null;
 let contentView = null;
 let cornerCssKey = null;
+let cornerBorderCssKey = null;
+let currentBorderColor = 'rgba(255,255,255,0.12)';
+
+function cornerBorderCss(color) {
+  return `html::after{content:'';position:absolute;inset:0;` +
+    `border:1px solid ${color};border-top:none;border-radius:0 0 19px 19px;` +
+    `pointer-events:none;z-index:2147483647;}`;
+}
+
+async function updateCornerBorder(color) {
+  currentBorderColor = color;
+  if (!contentView || contentView.webContents.isDestroyed()) return;
+  if (mainWin && !mainWin.isMaximized() && !mainWin.isFullScreen()) {
+    if (cornerBorderCssKey !== null) {
+      await contentView.webContents.removeInsertedCSS(cornerBorderCssKey).catch(() => {});
+      cornerBorderCssKey = null;
+    }
+    contentView.webContents.insertCSS(cornerBorderCss(color))
+      .then(k => { cornerBorderCssKey = k; })
+      .catch(() => {});
+  }
+}
 
 app.whenReady().then(async () => {
   if (args.widevine) await components.whenReady();
@@ -42,15 +72,6 @@ async function createMainWindow() {
   const router = require('./router');
 
   const ses = setupSession(appid, args.useragent);
-
-  const SCROLLBAR_CSS =
-    '::-webkit-scrollbar{width:8px;height:8px}' +
-    '::-webkit-scrollbar-track{background:transparent}' +
-    '::-webkit-scrollbar-thumb{background:rgba(128,128,128,0.5);border-radius:4px;' +
-    'border:2px solid transparent;background-clip:content-box}' +
-    '::-webkit-scrollbar-thumb:hover{background:rgba(128,128,128,0.7);border-radius:4px;' +
-    'border:2px solid transparent;background-clip:content-box}' +
-    '::-webkit-scrollbar-corner{background:transparent}';
 
   mainWin = new BrowserWindow({
     width: 1280, height: 800, minWidth: 400, minHeight: 300,
@@ -97,21 +118,36 @@ async function createMainWindow() {
       contentView.webContents.removeInsertedCSS(cornerCssKey).catch(() => {});
       cornerCssKey = null;
     }
+    if (cornerBorderCssKey !== null) {
+      contentView.webContents.removeInsertedCSS(cornerBorderCssKey).catch(() => {});
+      cornerBorderCssKey = null;
+    }
   });
   mainWin.on('unmaximize', () => {
     mainWin.setBackgroundColor('#00000000');
     updateContentBounds();
     mainWin.webContents.send('window-maximized', false);
-    if (!mainWin.isFullScreen())
+    if (!mainWin.isFullScreen()) {
       contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
+      contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => { cornerBorderCssKey = k; }).catch(() => {});
+    }
   });
 
   function applyFullscreen(isFullscreen) {
     mainWin.webContents.send('fullscreen', isFullscreen);
     mainWin.setBackgroundColor(isFullscreen ? '#000000' : '#00000000');
-    if (isFullscreen && cornerCssKey !== null) {
-      contentView.webContents.removeInsertedCSS(cornerCssKey).catch(() => {});
-      cornerCssKey = null;
+    if (isFullscreen) {
+      if (cornerCssKey !== null) {
+        contentView.webContents.removeInsertedCSS(cornerCssKey).catch(() => {});
+        cornerCssKey = null;
+      }
+      if (cornerBorderCssKey !== null) {
+        contentView.webContents.removeInsertedCSS(cornerBorderCssKey).catch(() => {});
+        cornerBorderCssKey = null;
+      }
+    } else if (!mainWin.isMaximized()) {
+      contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
+      contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => { cornerBorderCssKey = k; }).catch(() => {});
     }
     updateContentBounds();
   }
@@ -155,8 +191,10 @@ async function createMainWindow() {
     sendNavState();
     contentView.webContents.insertCSS(SCROLLBAR_CSS).catch(() => {});
     cornerCssKey = null;
+    cornerBorderCssKey = null;
     if (!mainWin.isMaximized() && !mainWin.isFullScreen()) {
       contentView.webContents.insertCSS(CORNER_CSS).then(k => { cornerCssKey = k; }).catch(() => {});
+      contentView.webContents.insertCSS(cornerBorderCss(currentBorderColor)).then(k => { cornerBorderCssKey = k; }).catch(() => {});
     }
     try { await inject.injectCSS(contentView.webContents, args.css); } catch {}
     try { await inject.injectJS(contentView.webContents, args.js); } catch {}
@@ -180,6 +218,8 @@ async function createMainWindow() {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('theme-color', color);
   });
 
+  ipcMain.on('border-color', (event, color) => updateCornerBorder(color));
+
   if (args.tray) {
     const { createTray } = require('./tray');
     const tray = await createTray(args.icon || null, mainWin, args.name || null);
@@ -194,11 +234,10 @@ function updateContentBounds() {
   const [w, h] = mainWin.getContentSize();
   const fs = mainWin.isFullScreen();
   const tbH = fs ? 0 : TITLEBAR_HEIGHT;
-  const bw = (fs || mainWin.isMaximized()) ? 0 : BORDER_WIDTH;
   contentView.setBounds({
-    x: bw,
+    x: 0,
     y: tbH,
-    width: Math.max(0, w - 2 * bw),
-    height: Math.max(0, h - tbH - bw),
+    width: w,
+    height: Math.max(0, h - tbH),
   });
 }

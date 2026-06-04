@@ -10,5 +10,6 @@ contextBridge.exposeInMainWorld('electron', {
   onThemeColor:(cb) => ipcRenderer.on('theme-color', (_, c) => cb(c)),
   onMaximize:  (cb) => ipcRenderer.on('window-maximized', (_, v) => cb(v)),
   onNavState:  (cb) => ipcRenderer.on('nav-state', (_, s) => cb(s)),
-  onFullscreen:(cb) => ipcRenderer.on('fullscreen', (_, v) => cb(v)),
+  onFullscreen:     (cb) => ipcRenderer.on('fullscreen', (_, v) => cb(v)),
+  updateBorderColor:(color) => ipcRenderer.send('border-color', color),
 });
