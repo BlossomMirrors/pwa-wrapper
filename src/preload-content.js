@@ -1,4 +1,5 @@
 (function() {
+  const platformVersion = require('os').release().split('-')[0];
   const brands = [
     { brand: 'Not/A)Brand', version: '99' },
     { brand: 'Google Chrome', version: '148' },
@@ -22,7 +23,7 @@
         mobile: false,
         model: '',
         platform: 'Linux',
-        platformVersion: '6.1.0',
+        platformVersion,
         uaFullVersion: '148.0.0.0',
         wow64: false,
       });

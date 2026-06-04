@@ -1,4 +1,26 @@
 const { app, Menu, nativeImage, Tray } = require('electron');
+const https = require('https');
+const http = require('http');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+function downloadToTemp(url) {
+  return new Promise((resolve, reject) => {
+    const ext = path.extname(new URL(url).pathname) || '.png';
+    const dest = path.join(os.tmpdir(), `blossomos-tray-icon${ext}`);
+    const file = fs.createWriteStream(dest);
+    const mod = url.startsWith('https') ? https : http;
+    mod.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        file.close();
+        return downloadToTemp(res.headers.location).then(resolve).catch(reject);
+      }
+      res.pipe(file);
+      file.on('finish', () => file.close(() => resolve(dest)));
+    }).on('error', (err) => { fs.unlink(dest, () => {}); reject(err); });
+  });
+}
 
 function makeDefaultIcon() {
   const size = 22;
@@ -17,12 +39,24 @@ function makeDefaultIcon() {
   return nativeImage.createFromBitmap(buf, { width: size, height: size });
 }
 
-function createTray(iconPath, win) {
-  let icon = iconPath ? nativeImage.createFromPath(iconPath) : null;
-  if (!icon || icon.isEmpty()) icon = makeDefaultIcon();
+async function createTray(iconPath, win, name) {
+  let resolvedPath = iconPath;
+  if (iconPath && /^https?:\/\//.test(iconPath)) {
+    try { resolvedPath = await downloadToTemp(iconPath); } catch { resolvedPath = null; }
+  }
+  // Prefer a path string — nativeImage.createFromBitmap can return a broken object on some Wayland builds.
+  let trayArg = resolvedPath;
+  if (!trayArg) {
+    try {
+      const img = makeDefaultIcon();
+      if (img && !img.isEmpty()) trayArg = img;
+    } catch {}
+  }
+  if (!trayArg) return null;
 
-  const tray = new Tray(icon);
-  tray.setToolTip(win.title || 'blossomos-webapps');
+  let tray;
+  try { tray = new Tray(trayArg); } catch { return null; }
+  tray.setToolTip(name || win.title || 'blossomos-webapps');
 
   const menu = Menu.buildFromTemplate([
     { label: 'Show', click: () => { win.show(); win.focus(); } },

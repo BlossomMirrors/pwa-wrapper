@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, WebContentsView } = require('electron');
+const { app, BrowserWindow, components, ipcMain, shell, WebContentsView } = require('electron');
 const minimist = require('minimist');
 const os = require('os');
 const path = require('path');
@@ -16,17 +16,6 @@ const urlFilter = args['url-filter'] ? new RegExp(args['url-filter']) : null;
 app.setName(appid);
 app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps', appid));
 
-const widevine = require('./widevine');
-
-if (args.widevine) {
-  const cdmPath = widevine.getCachedPath();
-  if (cdmPath) {
-    const version = widevine.getCachedVersion();
-    app.commandLine.appendSwitch('widevine-cdm-path', cdmPath);
-    if (version) app.commandLine.appendSwitch('widevine-cdm-version', version);
-  }
-}
-
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 const TITLEBAR_HEIGHT = 36;
@@ -38,51 +27,14 @@ let contentView = null;
 let cornerCssKey = null;
 
 app.whenReady().then(async () => {
-  if (args.widevine && !widevine.getCachedPath()) {
-    await runWidevineInstaller();
-    return;
-  }
-  createMainWindow();
-  if (args.widevine && widevine.shouldCheck()) {
-    widevine.checkForUpdate()
-      .then(async (needsUpdate) => { widevine.markChecked(); if (needsUpdate) await widevine.downloadAndExtract(); })
-      .catch(() => {});
-  }
+  if (args.widevine) await components.whenReady();
+  await createMainWindow();
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
-async function runWidevineInstaller() {
-  const win = new BrowserWindow({
-    width: 400, height: 160, resizable: false, center: true, frame: false,
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
-  });
-  win.loadURL('data:text/html,' + encodeURIComponent(
-    '<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;display:flex;align-items:center;' +
-    'justify-content:center;height:100vh;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;' +
-    'background:#18181f;color:#ededf0;text-align:center;}</style></head><body><div>' +
-    '<p id="msg">Installing Widevine CDM...</p>' +
-    '<p id="sub" style="font-size:12px;color:#91919e;margin-top:8px;">Downloading from Mozilla</p>' +
-    '</div></body></html>'
-  ));
-  try {
-    await widevine.downloadAndExtract((p) => {
-      if (p && !win.isDestroyed())
-        win.webContents.executeJavaScript(
-          'document.getElementById("sub").textContent="' + Math.round(p*100) + '% downloaded..."'
-        ).catch(() => {});
-    });
-    app.relaunch(); app.quit();
-  } catch (err) {
-    if (!win.isDestroyed())
-      win.webContents.executeJavaScript(
-        'document.getElementById("msg").textContent="Widevine download failed";' +
-        'document.getElementById("sub").textContent=' + JSON.stringify(String(err.message || err))
-      ).catch(() => {});
-  }
-}
 
-function createMainWindow() {
+async function createMainWindow() {
   const { setupSession } = require('./session');
   const inject = require('./inject');
   const router = require('./router');
@@ -210,8 +162,8 @@ function createMainWindow() {
 
   if (args.tray) {
     const { createTray } = require('./tray');
-    createTray(args.icon || null, mainWin);
-    mainWin.on('close', (event) => { if (!app.isQuitting) { event.preventDefault(); mainWin.hide(); } });
+    const tray = await createTray(args.icon || null, mainWin, args.name || null);
+    if (tray) mainWin.on('close', (event) => { if (!app.isQuitting) { event.preventDefault(); mainWin.hide(); } });
   }
 
   app.on('before-quit', () => { app.isQuitting = true; });
