@@ -1,0 +1,17 @@
+{
+  "name": "blossomos-webapps",
+  "version": "1.0.0",
+  "description": "Web App Support for Blossomos",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "minimist": "^1.2.8"
+  },
+  "devDependencies": {
+    "electron": "^42.3.3",
+    "electron-builder": "^26.8.1"
+  }
+}

@@ -1,0 +1,32 @@
+appId: org.blossomos.webapps
+productName: blossomos-webapps
+executableName: blossomos-webapps
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - src/**/*
+  - package.json
+
+linux:
+  target:
+    - target: rpm
+      arch: x64
+  category: Network
+  executableName: blossomos-webapps
+  desktop:
+    Name: Web App Support
+    Comment: Web App Support for Blossomos
+    NoDisplay: true
+
+rpm:
+  packageName: blossomos-webapps
+  summary: Web App Support for Blossomos
+  license: MIT
+  requires:
+    - unzip
+    - curl
+
+artifactName: "${productName}-${version}-${arch}.${ext}"

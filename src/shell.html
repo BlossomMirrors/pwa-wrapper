@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    *, *::before, *::after {
+      margin: 0; padding: 0; box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: 'Aspekta', ui-sans-serif, system-ui, sans-serif;
+      font-size: 12px;
+    }
+
+    #shell {
+      position: absolute;
+      top: 0;
+      left: 0;
+      overflow: hidden;
+    }
+
+    #titlebar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      height: 36px;
+      background-color: #18181f;
+      -webkit-app-region: drag;
+      transition: background-color 0.2s ease;
+      z-index: 1;
+    }
+
+    .title-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .nav-buttons {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+
+    .nav-btn {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      cursor: default;
+      padding: 3px;
+      border-radius: 3px;
+      position: relative;
+      flex-shrink: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .nav-btn:focus { outline: none; }
+    .nav-btn:disabled { opacity: 0.28; pointer-events: none; }
+
+    .nav-btn svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+
+    #titlebar-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+
+    #titlebar-title {
+      color: #ededf0;
+      font-weight: 400;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.2s ease;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-app-region: no-drag;
+      flex-shrink: 0;
+    }
+
+    .control-btn {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      cursor: default;
+      padding: 3px;
+      border-radius: 3px;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .control-btn:focus { outline: none; }
+
+    .control-btn svg {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+
+    .bg-rect {
+      transition: opacity 0.15s ease;
+    }
+
+    webview {
+      position: absolute;
+      top: 36px;
+      left: 0;
+      display: block;
+      user-select: auto;
+      -webkit-user-select: auto;
+    }
+  </style>
+</head>
+<body>
+  <div id="shell">
+    <div id="titlebar">
+      <div class="title-left">
+        <div class="nav-buttons">
+          <button id="btn-back" class="nav-btn" title="Back" disabled>
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5"
+                fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
+              <path class="stroke-path" d="M10 3.5L5.5 8L10 12.5" stroke="#D8D8DD" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button id="btn-fwd" class="nav-btn" title="Forward" disabled>
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5"
+                fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
+              <path class="stroke-path" d="M6 3.5L10.5 8L6 12.5" stroke="#D8D8DD" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <img id="titlebar-icon" style="display:none" alt="" />
+        <span id="titlebar-title"></span>
+      </div>
+      <div class="controls">
+        <button id="btn-min" class="control-btn" title="Minimize">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5"
+              fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
+            <path class="stroke-path" d="M4 8H12" stroke="#D8D8DD" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="btn-max" class="control-btn" title="Maximize">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5"
+              fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
+            <path class="stroke-path" d="M5 4H11C11.5523 4 12 4.44772 12 5V11C12 11.5523 11.5523 12 11 12H5C4.44772 12 4 11.5523 4 11V5C4 4.44772 4.44772 4 5 4Z" stroke="#D8D8DD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="btn-close" class="control-btn" title="Close">
+          <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5"
+              fill="rgba(255,102,95,0.6)" stroke="#FF665F" opacity="0"/>
+            <path class="stroke-path" d="M11.5 4.5L4.5 11.5" stroke="#D8D8DD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path class="stroke-path" d="M4.5 4.5L11.5 11.5" stroke="#D8D8DD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <webview id="content" allowpopups></webview>
+  </div>
+
+  <script>
+    const TITLEBAR_H = 36;
+
+    const titlebar = document.getElementById('titlebar');
+    const titleEl = document.getElementById('titlebar-title');
+    const iconEl = document.getElementById('titlebar-icon');
+    const btnBack = document.getElementById('btn-back');
+    const btnFwd = document.getElementById('btn-fwd');
+    const btnMin = document.getElementById('btn-min');
+    const btnMax = document.getElementById('btn-max');
+    const btnClose = document.getElementById('btn-close');
+    const shellEl = document.getElementById('shell');
+    const webviewEl = document.getElementById('content');
+
+    window.__applySize = function(width, height) {
+      shellEl.style.width = width + 'px';
+      shellEl.style.height = height + 'px';
+      webviewEl.style.width = width + 'px';
+      webviewEl.style.height = (height - TITLEBAR_H) + 'px';
+    };
+
+    window.electron.onResize(({ width, height }) => window.__applySize(width, height));
+
+    let isDark = true;
+    let cliColor = null;
+
+    function luminance(color) {
+      let r, g, b;
+      const rgb = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (rgb) {
+        r = parseInt(rgb[1]); g = parseInt(rgb[2]); b = parseInt(rgb[3]);
+      } else if (color.startsWith('#')) {
+        const h = color.replace('#', '');
+        const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+        r = parseInt(full.slice(0, 2), 16);
+        g = parseInt(full.slice(2, 4), 16);
+        b = parseInt(full.slice(4, 6), 16);
+      } else {
+        return 0;
+      }
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    }
+
+    function strokeNormal() {
+      return isDark ? '#D8D8DD' : '#505060';
+    }
+
+    function strokeHovered(type) {
+      if (type === 'close') return '#ffffff';
+      return isDark ? '#0C0C12' : '#F1F1F3';
+    }
+
+    function updateRectColors(btn, type) {
+      const rect = btn.querySelector('.bg-rect');
+      if (!rect) return;
+      if (type === 'close') {
+        rect.setAttribute('fill', isDark ? 'rgba(255,102,95,0.6)' : '#FF665F');
+        rect.setAttribute('stroke', isDark ? '#FF665F' : '#E04A44');
+      } else {
+        rect.setAttribute('fill', isDark ? 'rgba(241,241,243,0.6)' : '#606060');
+        rect.setAttribute('stroke', isDark ? '#D8D8DD' : '#505050');
+      }
+    }
+
+    function updateNavState() {
+      btnBack.disabled = !webviewEl.canGoBack();
+      btnFwd.disabled = !webviewEl.canGoForward();
+      [btnBack, btnFwd].forEach(btn => {
+        btn.querySelectorAll('.stroke-path').forEach(p =>
+          p.setAttribute('stroke', strokeNormal())
+        );
+      });
+    }
+
+    function setupNavButton(btn, action) {
+      btn.addEventListener('mouseenter', () => {
+        if (btn.disabled) return;
+        updateRectColors(btn, 'nav');
+        btn.querySelector('.bg-rect').style.opacity = '1';
+        btn.querySelectorAll('.stroke-path').forEach(p =>
+          p.setAttribute('stroke', strokeHovered('nav'))
+        );
+      });
+      btn.addEventListener('mouseleave', () => {
+        btn.querySelector('.bg-rect').style.opacity = '0';
+        btn.querySelectorAll('.stroke-path').forEach(p =>
+          p.setAttribute('stroke', strokeNormal())
+        );
+      });
+      btn.addEventListener('click', action);
+    }
+
+    setupNavButton(btnBack, () => webviewEl.goBack());
+    setupNavButton(btnFwd, () => webviewEl.goForward());
+
+    function updateControlStrokes() {
+      [btnMin, btnMax, btnClose].forEach(btn => {
+        const type = btn.dataset.type;
+        const hovered = !!btn.dataset.hovered;
+        updateRectColors(btn, type);
+        btn.querySelectorAll('.stroke-path').forEach(p =>
+          p.setAttribute('stroke', hovered ? strokeHovered(type) : strokeNormal())
+        );
+      });
+    }
+
+    function applyColor(color) {
+      const bg = color || cliColor || '#18181f';
+      titlebar.style.backgroundColor = bg;
+      isDark = luminance(bg) < 0.5;
+      titleEl.style.color = isDark ? '#ededf0' : '#18181f';
+      updateControlStrokes();
+      updateNavState();
+    }
+
+    function setupButton(btn, type, action) {
+      btn.dataset.type = type;
+      btn.addEventListener('mouseenter', () => {
+        btn.dataset.hovered = '1';
+        updateRectColors(btn, type);
+        btn.querySelector('.bg-rect').style.opacity = '1';
+        btn.querySelectorAll('.stroke-path').forEach(p =>
+          p.setAttribute('stroke', strokeHovered(type))
+        );
+      });
+      btn.addEventListener('mouseleave', () => {
+        delete btn.dataset.hovered;
+        btn.querySelector('.bg-rect').style.opacity = '0';
+        btn.querySelectorAll('.stroke-path').forEach(p =>
+          p.setAttribute('stroke', strokeNormal())
+        );
+      });
+      btn.addEventListener('click', action);
+    }
+
+    setupButton(btnMin, 'minimize', () => window.electron.minimize());
+    setupButton(btnMax, 'maximize', () => window.electron.maximize());
+    setupButton(btnClose, 'close', () => window.electron.close());
+
+    window.electron.onInit((data) => {
+      if (data.name) titleEl.textContent = data.name;
+      if (data.icon) { iconEl.src = data.icon; iconEl.style.display = ''; }
+      if (data.color) { cliColor = data.color; applyColor(null); }
+
+      window.__applySize(data.contentWidth, data.contentHeight);
+
+      webviewEl.setAttribute('partition', 'persist:' + data.appid);
+      if (data.useragent) webviewEl.setAttribute('useragent', data.useragent);
+      if (data.contentPreload) webviewEl.setAttribute('preload', 'file://' + data.contentPreload);
+      webviewEl.src = data.url || 'about:blank';
+    });
+
+    window.electron.onThemeColor((color) => applyColor(color));
+
+    window.electron.onMaximize((isMax) => {
+      btnMax.title = isMax ? 'Restore' : 'Maximize';
+    });
+
+    webviewEl.addEventListener('dom-ready', () => {
+      window.electron.notifyWebviewReady(webviewEl.getWebContentsId());
+      updateNavState();
+    });
+
+    webviewEl.addEventListener('did-navigate', updateNavState);
+    webviewEl.addEventListener('did-navigate-in-page', updateNavState);
+  </script>
+</body>
+</html>
