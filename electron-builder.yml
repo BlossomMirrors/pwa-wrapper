@@ -1,6 +1,7 @@
 appId: org.blossomos.webapps
 productName: blossomos-webapps
 executableName: blossomos-webapps
+electronDist: node_modules/electron/dist
 
 directories:
   output: dist
@@ -17,15 +18,15 @@ linux:
   category: Network
   executableName: blossomos-webapps
   desktop:
-    Name: Web App Support
-    Comment: Web App Support for Blossomos
-    NoDisplay: true
+    entry:
+      Name: Web App Support
+      Comment: Web App Support for Blossomos
+      NoDisplay: true
 
 rpm:
   packageName: blossomos-webapps
-  summary: Web App Support for Blossomos
-  license: MIT
-  requires:
+  synopsis: Web App Support for Blossomos
+  depends:
     - unzip
     - curl
 

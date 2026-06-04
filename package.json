@@ -2,6 +2,11 @@
   "name": "blossomos-webapps",
   "version": "1.0.0",
   "description": "Web App Support for Blossomos",
+  "homepage": "https://blossomos.org",
+  "author": {
+    "name": "koyu",
+    "email": "me@koyu.space"
+  },
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
