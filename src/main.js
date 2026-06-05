@@ -1,7 +1,9 @@
-const { app, BrowserWindow, components, ipcMain, shell, WebContentsView } = require('electron');
-const minimist = require('minimist');
-const os = require('os');
+// path, fs and child_process are loaded before electron so that the Wayland
+// proxy can be started before Chromium opens its own Wayland connection.
 const path = require('path');
+const fs   = require('fs');
+const { spawn } = require('child_process');
+const minimist = require('minimist');
 
 const args = minimist(process.argv.slice(2), {
   boolean: ['widevine', 'tray', 'minimized'],
@@ -11,13 +13,59 @@ const args = minimist(process.argv.slice(2), {
 
 const appid = args.appid || 'default';
 
+// Start the Wayland socket proxy BEFORE require('electron') so that
+// Chromium's Wayland connection goes through it from the first connect().
+// The proxy intercepts xdg_toplevel.set_app_id and replaces the product name
+// ("blossomos-webapps") with the real appid, fixing KWin's Fensterklasse.
+if (process.platform === 'linux' && appid !== 'default') {
+  const xdgRuntime  = process.env.XDG_RUNTIME_DIR || '/tmp';
+  const origDisplay = process.env.WAYLAND_DISPLAY  || 'wayland-0';
+  const proxyName   = `wayland-blossomos-${process.pid}`;
+  const proxySocket = path.join(xdgRuntime, proxyName);
+
+  // Locate the compiled proxy binary (dev: src/, packaged: resources/)
+  const binCandidates = [
+    path.join(__dirname, 'wayland-appid-proxy'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'wayland-appid-proxy') : '',
+  ].filter(Boolean);
+  const proxyBin = binCandidates.find(p => fs.existsSync(p));
+
+  if (proxyBin) {
+    const child = spawn(proxyBin, [proxyName, origDisplay, appid], {
+      stdio: ['ignore', 'ignore', 'inherit'],
+      detached: false,
+    });
+    child.on('error', err => process.stderr.write(`[pwa-wrapper] proxy: ${err}\n`));
+
+    // Synchronous wait: poll until the proxy creates its socket (or 5 s timeout).
+    const sab    = new SharedArrayBuffer(4);
+    const sabArr = new Int32Array(sab);
+    const limit  = Date.now() + 5000;
+    while (!fs.existsSync(proxySocket) && Date.now() < limit) {
+      Atomics.wait(sabArr, 0, 0, 20);
+    }
+
+    if (fs.existsSync(proxySocket)) {
+      process.env.WAYLAND_DISPLAY = proxyName;
+      process.stderr.write(`[pwa-wrapper] Wayland proxy ready (${proxyName})\n`);
+    } else {
+      process.stderr.write('[pwa-wrapper] Wayland proxy timed out, appid unchanged\n');
+      child.kill();
+    }
+  } else {
+    process.stderr.write('[pwa-wrapper] wayland-appid-proxy not found, appid will not be set\n');
+  }
+}
+
+const { app, BrowserWindow, components, ipcMain, shell, WebContentsView } = require('electron');
+const os = require('os');
+
 const urlFilter = args['url-filter'] ? new RegExp(args['url-filter']) : null;
 
 app.setName(appid);
 app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps', appid));
 
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
-app.commandLine.appendSwitch('class', appid);
 
 const TITLEBAR_HEIGHT = 36;
 // Rounded corners and bottom border gated on .w-corner class; toggled via executeJavaScript

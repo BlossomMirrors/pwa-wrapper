@@ -7,8 +7,17 @@ directories:
   output: dist
   buildResources: build
 
+extraResources:
+  - from: src/wayland-appid-proxy
+    to: wayland-appid-proxy
+
 files:
   - src/**/*
+  - "!src/wayland-appid-proxy"
+  - "!src/wayland-appid-proxy.c"
+  - "!src/wmclass-preload.so"
+  - "!src/wmclass-preload.c"
+  - "!src/wmclass-preload-asm.S"
   - package.json
 
 linux:

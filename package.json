@@ -10,6 +10,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
+    "prebuild": "gcc -O2 -o src/wayland-appid-proxy src/wayland-appid-proxy.c",
     "build": "electron-builder"
   },
   "dependencies": {

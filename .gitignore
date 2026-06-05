@@ -1,2 +1,4 @@
 node_modules
 dist
+src/wayland-appid-proxy
+src/wmclass-preload.so
