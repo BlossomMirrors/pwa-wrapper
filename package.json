@@ -17,7 +17,7 @@
     "minimist": "^1.2.8"
   },
   "devDependencies": {
-    "electron": "github:castlabs/electron-releases#v42.0.0+wvcus",
+    "electron": "github:castlabs/electron-releases#v42.3.3+wvcus",
     "electron-builder": "^26.8.1"
   }
 }
