@@ -38,5 +38,7 @@ rpm:
   depends:
     - unzip
     - curl
+  fpm:
+    - "--prefix=/usr/lib"
 
 artifactName: "${productName}-${version}-${arch}.${ext}"
