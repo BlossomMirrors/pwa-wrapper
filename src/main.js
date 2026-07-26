@@ -68,16 +68,6 @@ app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps'
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 const TITLEBAR_HEIGHT = 36;
-// Rounded corners and bottom border gated on .w-corner class; toggled via executeJavaScript
-// so there are no async key-tracking races with insertCSS/removeInsertedCSS.
-const CORNER_CSS =
-  'html.w-corner{overflow:hidden!important;height:100vh!important;' +
-  'clip-path:inset(0 0 0 0 round 0 0 19px 19px)!important;' +
-  'background-color:rgba(0,0,0,0.001)!important;}' +
-  'html.w-corner body{overflow:auto!important;height:100%!important;}' +
-  'html.w-corner::after{content:\'\';position:absolute;inset:0;' +
-  'border:1px solid var(--w-border,rgba(255,255,255,0.12));border-top:none;' +
-  'border-radius:0 0 19px 19px;pointer-events:none;z-index:2147483647;}';
 const SCROLLBAR_CSS =
   '::-webkit-scrollbar{width:8px;height:8px}' +
   '::-webkit-scrollbar-track{background:transparent}' +
@@ -88,23 +78,6 @@ const SCROLLBAR_CSS =
   '::-webkit-scrollbar-corner{background:transparent}';
 let mainWin = null;
 let contentView = null;
-let currentBorderColor = 'rgba(255,255,255,0.12)';
-
-function syncCornerClass() {
-  if (!contentView || contentView.webContents.isDestroyed()) return;
-  const windowed = !mainWin.isMaximized() && !mainWin.isFullScreen();
-  contentView.webContents.executeJavaScript(
-    `document.documentElement.classList[${JSON.stringify(windowed ? 'add' : 'remove')}]('w-corner');void 0`
-  ).catch(() => {});
-}
-
-function updateCornerBorder(color) {
-  currentBorderColor = color;
-  if (!contentView || contentView.webContents.isDestroyed()) return;
-  contentView.webContents.executeJavaScript(
-    `document.documentElement.style.setProperty('--w-border',${JSON.stringify(color)});void 0`
-  ).catch(() => {});
-}
 
 app.whenReady().then(async () => {
   if (args.widevine) await components.whenReady();
@@ -124,7 +97,7 @@ async function createMainWindow() {
   mainWin = new BrowserWindow({
     width: 1280, height: 800, minWidth: 400, minHeight: 300,
     frame: false,
-    transparent: true,
+    backgroundColor: '#18181f',
     show: false,
     icon: args.icon || undefined,
     webPreferences: {
@@ -156,29 +129,23 @@ async function createMainWindow() {
     },
   });
 
-  contentView.setBackgroundColor('#00000000');
+  contentView.setBackgroundColor('#18181f');
   mainWin.contentView.addChildView(contentView);
   updateContentBounds();
 
   mainWin.on('resize', updateContentBounds);
   mainWin.on('resized', updateContentBounds);
   mainWin.on('maximize', () => {
-    mainWin.setBackgroundColor('#18181f');
     updateContentBounds();
     mainWin.webContents.send('window-maximized', true);
-    syncCornerClass();
   });
   mainWin.on('unmaximize', () => {
-    mainWin.setBackgroundColor('#00000000');
     updateContentBounds();
     mainWin.webContents.send('window-maximized', false);
-    syncCornerClass();
   });
 
   function applyFullscreen(isFullscreen) {
     mainWin.webContents.send('fullscreen', isFullscreen);
-    mainWin.setBackgroundColor(isFullscreen ? '#000000' : '#00000000');
-    syncCornerClass();
     updateContentBounds();
   }
   mainWin.on('enter-full-screen', () => applyFullscreen(true));
@@ -219,13 +186,7 @@ async function createMainWindow() {
 
   contentView.webContents.on('did-finish-load', async () => {
     sendNavState();
-    await Promise.all([
-      contentView.webContents.insertCSS(SCROLLBAR_CSS),
-      contentView.webContents.insertCSS(CORNER_CSS),
-    ]).catch(() => {});
-    // Sync class and border color after CSS is in the renderer.
-    syncCornerClass();
-    updateCornerBorder(currentBorderColor);
+    await contentView.webContents.insertCSS(SCROLLBAR_CSS).catch(() => {});
     try { await inject.injectCSS(contentView.webContents, args.css); } catch {}
     try { await inject.injectJS(contentView.webContents, args.js); } catch {}
   });
@@ -247,8 +208,6 @@ async function createMainWindow() {
   ipcMain.on('theme-color', (event, color) => {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('theme-color', color);
   });
-
-  ipcMain.on('border-color', (event, color) => updateCornerBorder(color));
 
   if (args.tray) {
     const { createTray } = require('./tray');

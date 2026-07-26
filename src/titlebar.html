@@ -14,16 +14,6 @@
       font-size: 12px;
     }
 
-    #window-border {
-      position: fixed;
-      inset: 0;
-      border: 1px solid transparent;
-      border-radius: 20px;
-      pointer-events: none;
-      z-index: 9999;
-      clip-path: inset(0 0 calc(100% - 36px) 0);
-    }
-
     #titlebar {
       display: flex;
       align-items: center;
@@ -33,7 +23,6 @@
       background-color: #18181f;
       -webkit-app-region: drag;
       transition: background-color 0.2s ease;
-      border-radius: 20px 20px 0 0;
     }
 
     .title-left {
@@ -72,7 +61,6 @@
   </style>
 </head>
 <body>
-  <div id="window-border"></div>
   <div id="titlebar">
     <div class="title-left">
       <div class="nav-buttons">
@@ -116,7 +104,6 @@
   </div>
 
   <script>
-    const windowBorder = document.getElementById('window-border');
     const titlebar = document.getElementById('titlebar');
     const titleEl = document.getElementById('titlebar-title');
     const iconEl = document.getElementById('titlebar-icon');
@@ -128,7 +115,6 @@
 
     let isDark = true;
     let cliColor = null;
-    let isMaximized = false;
 
     function luminance(color) {
       let r, g, b;
@@ -170,36 +156,12 @@
       });
     }
 
-    function computeBorderColor(bg, dark) {
-      let r, g, b;
-      const rgb = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (rgb) { r = +rgb[1]; g = +rgb[2]; b = +rgb[3]; }
-      else if (bg.startsWith('#')) {
-        const h = bg.replace('#', '');
-        const full = h.length === 3 ? h.split('').map(c => c+c).join('') : h;
-        r = parseInt(full.slice(0,2),16); g = parseInt(full.slice(2,4),16); b = parseInt(full.slice(4,6),16);
-      } else { return dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)'; }
-      if (dark) {
-        r = Math.round(r + (255-r)*0.25);
-        g = Math.round(g + (255-g)*0.25);
-        b = Math.round(b + (255-b)*0.25);
-      } else {
-        r = Math.round(r * 0.85);
-        g = Math.round(g * 0.85);
-        b = Math.round(b * 0.85);
-      }
-      return `rgb(${r},${g},${b})`;
-    }
-
     function applyColor(color) {
       const bg = color || cliColor || '#18181f';
       titlebar.style.backgroundColor = bg;
       isDark = luminance(bg) < 0.5;
       titleEl.style.color = isDark ? '#ededf0' : '#18181f';
       updateAllStrokes();
-      const borderColor = computeBorderColor(bg, isDark);
-      windowBorder.style.borderColor = borderColor;
-      window.electron.updateBorderColor(borderColor);
     }
 
     function setupButton(btn, type, action) {
@@ -234,10 +196,7 @@
     window.electron.onThemeColor((color) => applyColor(color));
 
     window.electron.onMaximize((isMax) => {
-      isMaximized = isMax;
       btnMax.title = isMax ? 'Restore' : 'Maximize';
-      titlebar.style.borderRadius = isMax ? '0' : '20px 20px 0 0';
-      windowBorder.style.display = isMax ? 'none' : '';
     });
 
     window.electron.onNavState(({ canGoBack, canGoForward }) => {
@@ -248,8 +207,6 @@
 
     window.electron.onFullscreen((isFullscreen) => {
       titlebar.style.display = isFullscreen ? 'none' : '';
-      titlebar.style.borderRadius = (!isFullscreen && isMaximized) ? '0' : '20px 20px 0 0';
-      windowBorder.style.display = (isFullscreen || isMaximized) ? 'none' : '';
     });
   </script>
 </body>
