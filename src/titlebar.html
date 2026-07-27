@@ -15,6 +15,7 @@
     }
 
     #titlebar {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -22,7 +23,12 @@
       height: 36px;
       background-color: #18181f;
       -webkit-app-region: drag;
-      transition: background-color 0.2s ease;
+    }
+
+    #titlebar.aurorae {
+      padding: 0;
+      background: transparent;
+      overflow: hidden;
     }
 
     .title-left {
@@ -39,25 +45,33 @@
     #titlebar-title {
       color: #ededf0; font-weight: 400;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      transition: color 0.2s ease;
     }
 
-    .controls {
-      display: flex; align-items: center; gap: 8px;
-      -webkit-app-region: no-drag; flex-shrink: 0;
-    }
-
-    .control-btn, .nav-btn {
+    .nav-btn {
       width: 24px; height: 24px;
       display: flex; align-items: center; justify-content: center;
       background: none; border: none; cursor: default;
       padding: 3px; border-radius: 3px;
       position: relative; flex-shrink: 0;
     }
-    .control-btn:focus, .nav-btn:focus { outline: none; }
-    .control-btn svg, .nav-btn svg { width: 18px; height: 18px; display: block; }
+    .nav-btn:focus { outline: none; }
+    .nav-btn svg { width: 18px; height: 18px; display: block; }
     .nav-btn:disabled { opacity: 0.28; pointer-events: none; }
     .bg-rect { transition: opacity 0.15s ease; }
+
+    /* Aurorae theme rendering -- buttons are plain rasterized tiles
+       positioned to match the theme's own layout metrics. */
+    .aurorae-btn {
+      display: block;
+      cursor: default;
+      flex-shrink: 0;
+    }
+    #ta-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -66,40 +80,19 @@
       <div class="nav-buttons">
         <button id="btn-back" class="nav-btn" title="Back" disabled>
           <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5" fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
+            <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5" fill="rgba(128,128,128,0.35)" opacity="0"/>
             <path class="stroke-path" d="M10 3.5L5.5 8L10 12.5" stroke="#D8D8DD" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
         <button id="btn-fwd" class="nav-btn" title="Forward" disabled>
           <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5" fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
+            <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5" fill="rgba(128,128,128,0.35)" opacity="0"/>
             <path class="stroke-path" d="M6 3.5L10.5 8L6 12.5" stroke="#D8D8DD" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
       <img id="titlebar-icon" style="display:none" alt="" />
       <span id="titlebar-title"></span>
-    </div>
-    <div class="controls">
-      <button id="btn-min" class="control-btn" title="Minimize">
-        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5" fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
-          <path class="stroke-path" d="M4 8H12" stroke="#D8D8DD" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-      <button id="btn-max" class="control-btn" title="Maximize">
-        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5" fill="rgba(241,241,243,0.6)" stroke="#D8D8DD" opacity="0"/>
-          <path class="stroke-path" d="M5 4H11C11.5523 4 12 4.44772 12 5V11C12 11.5523 11.5523 12 11 12H5C4.44772 12 4 11.5523 4 11V5C4 4.44772 4.44772 4 5 4Z" stroke="#D8D8DD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
-      <button id="btn-close" class="control-btn" title="Close">
-        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect class="bg-rect" x="0.5" y="0.5" width="15" height="15" rx="2.5" fill="rgba(255,102,95,0.6)" stroke="#FF665F" opacity="0"/>
-          <path class="stroke-path" d="M11.5 4.5L4.5 11.5" stroke="#D8D8DD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path class="stroke-path" d="M4.5 4.5L11.5 11.5" stroke="#D8D8DD" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
     </div>
   </div>
 
@@ -109,104 +102,257 @@
     const iconEl = document.getElementById('titlebar-icon');
     const btnBack = document.getElementById('btn-back');
     const btnFwd = document.getElementById('btn-fwd');
-    const btnMin = document.getElementById('btn-min');
-    const btnMax = document.getElementById('btn-max');
-    const btnClose = document.getElementById('btn-close');
 
-    let isDark = true;
-    let cliColor = null;
+    let auroraeTheme = null;
+    let isWindowActive = true;
+    let isMaximized = false;
+    let taTitle;
+    const auroraeButtonEls = [];
+
+    // -- Custom titlebar color -- either a deliberate override via the
+    // --color launch flag, or automatic detection of the wrapped page's own
+    // background/theme-color (skipped when that's plain black or white,
+    // since those are generic defaults rather than an actual brand color
+    // and would just make the titlebar look broken/undecorated). Only the
+    // fill + text/nav-icon contrast respond to it; the button art stays
+    // theme-provided (small enough not to clash, and not practical to
+    // recolor since it's pre-rendered raster).
+    let customColor = null;
+
+    function parseRgb(color) {
+      const rgb = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (rgb) return [+rgb[1], +rgb[2], +rgb[3]];
+      if (color.startsWith('#')) {
+        const h = color.replace('#', '');
+        const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+        return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
+      }
+      return null;
+    }
 
     function luminance(color) {
-      let r, g, b;
-      const rgb = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-      if (rgb) { r = +rgb[1]; g = +rgb[2]; b = +rgb[3]; }
-      else if (color.startsWith('#')) {
-        const h = color.replace('#', '');
-        const full = h.length === 3 ? h.split('').map(c => c+c).join('') : h;
-        r = parseInt(full.slice(0,2),16); g = parseInt(full.slice(2,4),16); b = parseInt(full.slice(4,6),16);
-      } else return 0;
-      return (0.299*r + 0.587*g + 0.114*b) / 255;
+      const rgb = parseRgb(color);
+      if (!rgb) return 0;
+      const [r, g, b] = rgb;
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     }
 
-    function strokeNormal() { return isDark ? '#D8D8DD' : '#505060'; }
-    function strokeHovered(type) {
-      if (type === 'close') return '#ffffff';
-      return isDark ? '#0C0C12' : '#F1F1F3';
+    // Generic page-background defaults that shouldn't hijack the titlebar
+    // accent: pure black, pure white, and the very common off-white
+    // rgb(238,238,238) (e.g. example.com's body).
+    const COLOR_BLACKLIST = [[0, 0, 0], [255, 255, 255], [238, 238, 238]];
+
+    function isBlacklistedColor(color) {
+      const rgb = parseRgb(color);
+      if (!rgb) return false;
+      return COLOR_BLACKLIST.some(([r, g, b]) => rgb[0] === r && rgb[1] === g && rgb[2] === b);
     }
 
-    function updateRectColors(btn, type) {
-      const rect = btn.querySelector('.bg-rect');
-      if (!rect) return;
-      if (type === 'close') {
-        rect.setAttribute('fill', isDark ? 'rgba(255,102,95,0.6)' : '#FF665F');
-        rect.setAttribute('stroke', isDark ? '#FF665F' : '#E04A44');
-      } else {
-        rect.setAttribute('fill', isDark ? 'rgba(241,241,243,0.6)' : '#606060');
-        rect.setAttribute('stroke', isDark ? '#D8D8DD' : '#505050');
-      }
+    // -- Nav buttons (back/forward) -- Aurorae has no concept of these, so
+    // they stay custom chrome; their icon color just follows the same
+    // color the title text uses so they read consistently either way.
+    function navStrokeColor() {
+      if (customColor) return luminance(customColor) < 0.5 ? '#ededf0' : '#18181f';
+      if (!auroraeTheme) return '#D8D8DD';
+      return isWindowActive ? auroraeTheme.general.activeTextColor : auroraeTheme.general.inactiveTextColor;
     }
 
-    function updateAllStrokes() {
-      [btnBack, btnFwd, btnMin, btnMax, btnClose].forEach(btn => {
-        const type = btn.dataset.type;
-        updateRectColors(btn, type);
-        btn.querySelectorAll('.stroke-path').forEach(p =>
-          p.setAttribute('stroke', btn.dataset.hovered ? strokeHovered(type) : strokeNormal())
-        );
+    function updateNavButtonColors() {
+      const color = navStrokeColor();
+      [btnBack, btnFwd].forEach(btn => {
+        btn.querySelectorAll('.stroke-path').forEach(p => p.setAttribute('stroke', color));
       });
     }
 
-    function applyColor(color) {
-      const bg = color || cliColor || '#18181f';
-      titlebar.style.backgroundColor = bg;
-      isDark = luminance(bg) < 0.5;
-      titleEl.style.color = isDark ? '#ededf0' : '#18181f';
-      updateAllStrokes();
-    }
-
-    function setupButton(btn, type, action) {
-      btn.dataset.type = type;
+    function setupNavButton(btn, action) {
       btn.addEventListener('mouseenter', () => {
         if (btn.disabled) return;
-        btn.dataset.hovered = '1';
-        updateRectColors(btn, type);
         btn.querySelector('.bg-rect').style.opacity = '1';
-        btn.querySelectorAll('.stroke-path').forEach(p => p.setAttribute('stroke', strokeHovered(type)));
       });
       btn.addEventListener('mouseleave', () => {
-        delete btn.dataset.hovered;
         btn.querySelector('.bg-rect').style.opacity = '0';
-        btn.querySelectorAll('.stroke-path').forEach(p => p.setAttribute('stroke', strokeNormal()));
       });
       btn.addEventListener('click', action);
     }
 
-    setupButton(btnBack, 'nav', () => window.electron.navBack());
-    setupButton(btnFwd,  'nav', () => window.electron.navForward());
-    setupButton(btnMin,  'minimize', () => window.electron.minimize());
-    setupButton(btnMax,  'maximize', () => window.electron.maximize());
-    setupButton(btnClose,'close',    () => window.electron.close());
+    setupNavButton(btnBack, () => window.electron.navBack());
+    setupNavButton(btnFwd,  () => window.electron.navForward());
+
+    // -- Aurorae window decoration rendering ---------------------------------
+
+    const AURORAE_BUTTON_ACTIONS = {
+      I: () => window.electron.minimize(),
+      A: () => window.electron.maximize(),
+      X: () => window.electron.close(),
+    };
+
+    // Only buttons this wrapper can actually act on are rendered; aurorae
+    // codes with no backing IPC action here (menu, all-desktops, keep
+    // above/below, shade, help, appmenu) are silently skipped rather than
+    // shown as non-functional chrome.
+    function auroraeButtonEntry(code) {
+      if (code === 'A') {
+        return (isMaximized && auroraeTheme.buttons.restore) || auroraeTheme.buttons.maximize;
+      }
+      const type = { I: 'minimize', X: 'close' }[code];
+      return type ? auroraeTheme.buttons[type] : null;
+    }
+
+    function auroraeStateTile(entry, hovered, pressed) {
+      const s = entry.states;
+      if (pressed) return isWindowActive ? s.pressed : s.pressedInactive;
+      if (hovered) return isWindowActive ? s.hover : s.hoverInactive;
+      return isWindowActive ? s.active : s.inactive;
+    }
+
+    function buildAuroraeButton(code) {
+      const entry = auroraeButtonEntry(code);
+      if (!entry) return null;
+      const img = document.createElement('img');
+      img.className = 'aurorae-btn';
+      img.style.width = entry.width + 'px';
+      img.style.height = entry.height + 'px';
+      let hovered = false, pressed = false;
+      function refresh() { img.src = auroraeStateTile(auroraeButtonEntry(code), hovered, pressed).dataUrl; }
+      img.addEventListener('mouseenter', () => { hovered = true; refresh(); });
+      img.addEventListener('mouseleave', () => { hovered = false; pressed = false; refresh(); });
+      img.addEventListener('mousedown', () => { pressed = true; refresh(); });
+      img.addEventListener('mouseup', () => { pressed = false; refresh(); });
+      img.addEventListener('click', () => { const a = AURORAE_BUTTON_ACTIONS[code]; if (a) a(); });
+      img._refresh = refresh;
+      refresh();
+      return img;
+    }
+
+    function renderAuroraeButtons(container, codes) {
+      for (const code of codes) {
+        const btn = buildAuroraeButton(code);
+        if (btn) { container.appendChild(btn); auroraeButtonEls.push(btn); }
+      }
+    }
+
+    function refreshAuroraeButtons() {
+      auroraeButtonEls.forEach(img => img._refresh());
+    }
+
+    // Prefer the maximized-specific tile set when the theme provides one and
+    // the window is currently maximized; fall back to the regular frame.
+    function currentFrame() {
+      const base = isWindowActive ? 'active' : 'inactive';
+      const maxFrame = auroraeTheme.frame[base + 'Maximized'];
+      if (isMaximized && maxFrame && maxFrame.top) return maxFrame;
+      return auroraeTheme.frame[base];
+    }
+
+    function refreshAuroraeFrame() {
+      const frame = currentFrame();
+      // The titlebar is a flat color -- either the wrapped app's custom
+      // color if it set one, or sampled from the theme's own top tile.
+      // No corner/shadow art is drawn; also pushed to the actual Electron
+      // window background so any repaint/resize flicker matches too.
+      const fillColor = customColor || (frame.top && frame.top.color);
+      if (fillColor) {
+        titlebar.style.backgroundColor = fillColor;
+        window.electron.reportColor(fillColor);
+      }
+      taTitle.style.color = customColor
+        ? (luminance(customColor) < 0.5 ? '#ededf0' : '#18181f')
+        : (isWindowActive ? auroraeTheme.general.activeTextColor : auroraeTheme.general.inactiveTextColor);
+      updateNavButtonColors();
+    }
+
+    function initAurorae(theme) {
+      auroraeTheme = theme;
+
+      const navButtonsGroup = document.querySelector('.nav-buttons');
+      const appIcon = iconEl.src ? iconEl : null;
+
+      // Tile height includes the shadow-blur margin (rc PaddingTop) above
+      // the visible chrome; the container only shows that visible slice, so
+      // size it to (tile height - paddingTop), not the full tile height, or
+      // the shadow renders as visible dead space above the actual bar.
+      const topHeights = [theme.frame.active.top, theme.frame.inactive.top]
+        .filter(Boolean).map(t => t.height);
+      const rawHeight = Math.max(16, ...topHeights);
+      const h = Math.round(Math.max(16, rawHeight - (theme.layout.paddingTop || 0)));
+      titlebar.style.height = h + 'px';
+      titlebar.classList.add('aurorae');
+      titlebar.innerHTML = '';
+
+      // Tiles bundle the shadow margin (rc PaddingTop) above the actual
+      // visible chrome band, which sits flush against the bottom of the
+      // tile -- vertically center buttons/title within that band (near the
+      // bottom of the titlebar), not the full shadow-inclusive height.
+      const bandHeight = Math.max(theme.layout.buttonHeight || 0, theme.layout.titleHeight || 0, 16);
+      const bandBottom = theme.layout.titleEdgeBottom || 0;
+      const bandCss = 'position:absolute; bottom:' + bandBottom + 'px; height:' + bandHeight + 'px;'
+        + ' display:flex; align-items:center;';
+
+      const leftGroup = document.createElement('div');
+      leftGroup.style.cssText = bandCss + ' left:'
+        + (theme.layout.titleEdgeLeft + theme.layout.titleBorderLeft)
+        + 'px; gap:' + theme.layout.buttonSpacing + 'px; -webkit-app-region:no-drag;';
+      if (appIcon) leftGroup.appendChild(appIcon);
+      if (navButtonsGroup) leftGroup.appendChild(navButtonsGroup);
+      renderAuroraeButtons(leftGroup, (theme.general.leftButtons || '').split(''));
+      titlebar.appendChild(leftGroup);
+
+      const rightGroup = document.createElement('div');
+      rightGroup.style.cssText = bandCss + ' right:'
+        + (theme.layout.titleEdgeRight + theme.layout.titleBorderRight)
+        + 'px; gap:' + theme.layout.buttonSpacing + 'px; -webkit-app-region:no-drag;';
+      renderAuroraeButtons(rightGroup, (theme.general.rightButtons || '').split(''));
+      titlebar.appendChild(rightGroup);
+
+      taTitle = document.createElement('span');
+      taTitle.id = 'ta-title';
+      taTitle.textContent = titleEl.textContent;
+      taTitle.style.cssText = bandCss;
+      taTitle.style.justifyContent = { Left: 'flex-start', Center: 'center', Right: 'flex-end' }[theme.general.titleAlignment] || 'center';
+      // The title fills the space between the two button groups (matching
+      // real aurorae layout), not just a flex-centered guess -- measuring
+      // after the groups are in the DOM avoids overlap regardless of how
+      // many buttons ended up supported/rendered on each side.
+      const leftWidth = leftGroup.offsetWidth ? leftGroup.offsetWidth + theme.layout.buttonSpacing : 0;
+      const rightWidth = rightGroup.offsetWidth ? rightGroup.offsetWidth + theme.layout.buttonSpacing : 0;
+      taTitle.style.left = (theme.layout.titleEdgeLeft + theme.layout.titleBorderLeft + leftWidth) + 'px';
+      taTitle.style.right = (theme.layout.titleEdgeRight + theme.layout.titleBorderRight + rightWidth) + 'px';
+      titlebar.appendChild(taTitle);
+
+      refreshAuroraeFrame();
+      window.electron.reportHeight(h);
+    }
 
     window.electron.onInit((data) => {
       if (data.name) titleEl.textContent = data.name;
       if (data.icon) { iconEl.src = data.icon; iconEl.style.display = ''; }
-      if (data.color) { cliColor = data.color; applyColor(null); }
+      if (data.color) customColor = data.color;
+      if (data.aurorae) initAurorae(data.aurorae);
     });
 
-    window.electron.onThemeColor((color) => applyColor(color));
+    window.electron.onThemeColor((color) => {
+      if (!color || isBlacklistedColor(color)) return;
+      customColor = color;
+      if (auroraeTheme) refreshAuroraeFrame();
+    });
 
     window.electron.onMaximize((isMax) => {
-      btnMax.title = isMax ? 'Restore' : 'Maximize';
+      isMaximized = isMax;
+      if (auroraeTheme) { refreshAuroraeFrame(); refreshAuroraeButtons(); }
     });
 
     window.electron.onNavState(({ canGoBack, canGoForward }) => {
       btnBack.disabled = !canGoBack;
       btnFwd.disabled  = !canGoForward;
-      updateAllStrokes();
     });
 
     window.electron.onFullscreen((isFullscreen) => {
       titlebar.style.display = isFullscreen ? 'none' : '';
+    });
+
+    window.electron.onFocusChange((active) => {
+      isWindowActive = active;
+      if (auroraeTheme) { refreshAuroraeFrame(); refreshAuroraeButtons(); }
     });
   </script>
 </body>

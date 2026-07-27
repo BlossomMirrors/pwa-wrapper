@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; }
+  #stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+  const stage = document.getElementById('stage');
+
+  window.__loadSvg = function (svgText, scale) {
+    stage.style.transform = 'scale(' + scale + ')';
+    stage.innerHTML = svgText;
+    const svg = stage.querySelector('svg');
+    if (svg) {
+      // Themes lay multiple state groups out side by side beyond the
+      // declared viewport (e.g. a 22x22 root housing 5 translated 22x22
+      // button states) relying on the renderer not clipping them.
+      svg.style.overflow = 'visible';
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+    }
+    if (window.__colorSchemeCss) {
+      const styleEl = stage.querySelector('#current-color-scheme');
+      if (styleEl) styleEl.textContent = window.__colorSchemeCss;
+    }
+    // Non-visual guide markers: hint-*-margin (green) and shadow-hint-*-margin
+    // (magenta) both encode geometry, not artwork meant to be seen.
+    stage.querySelectorAll('[id*="hint-"]').forEach(el => { el.style.display = 'none'; });
+  };
+
+  // Re-scaling an already-loaded SVG (no innerHTML replacement) so callers
+  // can probe at scale 1 and commit to a final scale without a second full
+  // content reload right before capture.
+  window.__setScale = function (scale) {
+    stage.style.transform = 'scale(' + scale + ')';
+  };
+
+  window.__setColorScheme = function (css) {
+    window.__colorSchemeCss = css;
+  };
+
+  window.__measure = function (id) {
+    const el = stage.querySelector('#' + CSS.escape(id));
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  };
+
+  window.__hasElement = function (id) {
+    return !!stage.querySelector('#' + CSS.escape(id));
+  };
+</script>
+</body>
+</html>

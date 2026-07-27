@@ -67,7 +67,7 @@ app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps'
 
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
-const TITLEBAR_HEIGHT = 36;
+let titlebarHeight = 36;
 const SCROLLBAR_CSS =
   '::-webkit-scrollbar{width:8px;height:8px}' +
   '::-webkit-scrollbar-track{background:transparent}' +
@@ -87,10 +87,39 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 
+// BrowserWindow.setBackgroundColor() only accepts hex; titlebar colors are
+// produced as rgb()/rgba() (theme accent, custom app color) or already hex.
+function toHexColor(color) {
+  if (typeof color !== 'string') return null;
+  if (/^#[0-9a-f]{3,8}$/i.test(color)) return color;
+  const m = color.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!m) return null;
+  const toHex = n => Math.max(0, Math.min(255, Number(n))).toString(16).padStart(2, '0');
+  return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
+}
+
+async function resolveAuroraeTheme() {
+  const aurorae = require('./aurorae/render');
+  try {
+    const live = aurorae.detectLiveThemeDir();
+    const dir  = live ? live.dir  : path.join(__dirname, 'aurorae', 'fallback-theme');
+    const name = live ? live.name : 'ActiveAccentDawn';
+    return await aurorae.renderAuroraeThemeFromDir(dir, name);
+  } catch (err) {
+    process.stderr.write(`[pwa-wrapper] aurorae render failed: ${err}\n`);
+    return null;
+  }
+}
+
 async function createMainWindow() {
   const { setupSession } = require('./session');
   const inject = require('./inject');
   const router = require('./router');
+
+  // Kicked off in parallel with window/webContents setup below so the
+  // (comparatively slow) SVG rasterization overlaps normal startup instead
+  // of serializing after it; awaited just before it's actually needed.
+  const auroraeThemePromise = resolveAuroraeTheme();
 
   const ses = setupSession(appid, args.useragent);
 
@@ -108,7 +137,7 @@ async function createMainWindow() {
 
   mainWin.loadFile(path.join(__dirname, 'titlebar.html'));
 
-  mainWin.webContents.on('did-finish-load', () => {
+  mainWin.webContents.on('did-finish-load', async () => {
     mainWin.setContentSize(1280, 800);
     if (!mainWin.isVisible()) {
       if (args.minimized && args.tray) { /* stay hidden, tray-only */ }
@@ -116,10 +145,17 @@ async function createMainWindow() {
       else mainWin.show();
     }
     updateContentBounds();
-    mainWin.webContents.send('titlebar-init', {
-      name: args.name || '', color: args.color || null, icon: args.icon || null,
-    });
+    const aurorae = await auroraeThemePromise;
+    if (mainWin && !mainWin.isDestroyed()) {
+      mainWin.webContents.send('titlebar-init', {
+        name: args.name || '', color: args.color || null, icon: args.icon || null,
+        aurorae,
+      });
+    }
   });
+
+  mainWin.on('focus', () => mainWin.webContents.send('focus-change', true));
+  mainWin.on('blur',  () => mainWin.webContents.send('focus-change', false));
 
   contentView = new WebContentsView({
     webPreferences: {
@@ -209,6 +245,17 @@ async function createMainWindow() {
     if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('theme-color', color);
   });
 
+  ipcMain.on('titlebar-resize', (event, height) => {
+    if (typeof height !== 'number' || height <= 0) return;
+    titlebarHeight = height;
+    updateContentBounds();
+  });
+
+  ipcMain.on('titlebar-color', (event, color) => {
+    const hex = toHexColor(color);
+    if (hex && mainWin && !mainWin.isDestroyed()) mainWin.setBackgroundColor(hex);
+  });
+
   if (args.tray) {
     const { createTray } = require('./tray');
     const tray = await createTray(args.icon || null, mainWin, args.name || null);
@@ -222,7 +269,7 @@ function updateContentBounds() {
   if (!mainWin || !contentView) return;
   const [w, h] = mainWin.getContentSize();
   const fs = mainWin.isFullScreen();
-  const tbH = fs ? 0 : TITLEBAR_HEIGHT;
+  const tbH = fs ? 0 : titlebarHeight;
   contentView.setBounds({
     x: 0,
     y: tbH,
