@@ -65,6 +65,21 @@ const urlFilter = args['url-filter'] ? new RegExp(args['url-filter']) : null;
 app.setName(appid);
 app.setPath('userData', path.join(os.homedir(), '.local/share/blossomos-webapps', appid));
 
+// requestSingleInstanceLock() keys its lock off the userData path set above,
+// so this only enforces one instance per appid, not one instance globally.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  return;
+}
+
+app.on('second-instance', () => {
+  if (mainWin) {
+    if (mainWin.isMinimized()) mainWin.restore();
+    if (!mainWin.isVisible()) mainWin.show();
+    mainWin.focus();
+  }
+});
+
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 
 let titlebarHeight = 36;
