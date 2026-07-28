@@ -90,16 +90,31 @@ static uint8_t *patch(uint8_t *data, size_t *sz) {
     int delta = nenc - oenc;
 
     /* Find the Wayland message header that contains offset 'off', so we can
-     * update its size field.  Wayland header: [obj_id:4][size<<16|op:4]. */
+     * update its size field.  Wayland header: [obj_id:4][size<<16|op:4].
+     * This walk assumes 'data' starts exactly on a message boundary, which
+     * only holds if the whole message stream so far has been read in step;
+     * a message split across two recvmsg() calls (more likely the busier
+     * the connection is, e.g. during video playback or heavy input) leaves
+     * this chunk starting mid-message, so the walk can exit having found
+     * garbage (msz < 8) or simply run off the end without ever containing
+     * 'off'. Track that explicitly -- writing a "corrected" size field at
+     * a stale msg_start in that case would corrupt unrelated bytes in the
+     * client->compositor stream instead of just missing this rename. */
     size_t msg_start = 0;
+    int found = 0;
     while (msg_start + 8 <= n) {
         uint32_t w;
         memcpy(&w, data + msg_start + 4, 4);
         uint16_t msz = (uint16_t)(w >> 16);
-        if (msz < 8) break;
-        if ((size_t)off >= msg_start && (size_t)off < msg_start + msz) break;
+        /* A claimed size that's too small, or that extends past the bytes
+         * we actually received, cannot be a real header at this position --
+         * garbage (misaligned chunk) can otherwise produce a large enough
+         * bogus size to spuriously "contain" off on the first iteration. */
+        if (msz < 8 || msg_start + msz > n) break;
+        if ((size_t)off >= msg_start && (size_t)off < msg_start + msz) { found = 1; break; }
         msg_start += msz;
     }
+    if (!found) return data;
 
     size_t new_n = n + (size_t)delta;
     uint8_t *nb = malloc(new_n);

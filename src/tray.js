@@ -43,6 +43,8 @@ async function createTray(iconPath, win, name) {
   let resolvedPath = iconPath;
   if (iconPath && /^https?:\/\//.test(iconPath)) {
     try { resolvedPath = await downloadToTemp(iconPath); } catch { resolvedPath = null; }
+  } else if (iconPath && iconPath.startsWith('file://')) {
+    try { resolvedPath = require('url').fileURLToPath(iconPath); } catch { resolvedPath = null; }
   }
   // Prefer a path string — nativeImage.createFromBitmap can return a broken object on some Wayland builds.
   let trayArg = resolvedPath;

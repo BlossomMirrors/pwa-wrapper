@@ -13,6 +13,21 @@ const args = minimist(process.argv.slice(2), {
 
 const appid = args.appid || 'default';
 
+// nativeImage.createFromPath (used internally by BaseWindow's icon option)
+// expects a plain filesystem path, not a file:// URI.
+function iconFsPath(icon) {
+  if (icon && icon.startsWith('file://')) {
+    try { return require('url').fileURLToPath(icon); } catch { return icon; }
+  }
+  return icon;
+}
+
+// Reference to the spawned wayland-appid-proxy child, if any, so it can be
+// killed on exit -- nothing else owns this process and without an explicit
+// kill it keeps running (and its listening socket with it) forever after
+// this app quits.
+let waylandProxyChild = null;
+
 // Start the Wayland socket proxy BEFORE require('electron') so that
 // Chromium's Wayland connection goes through it from the first connect().
 // The proxy intercepts xdg_toplevel.set_app_id and replaces the product name
@@ -35,6 +50,7 @@ if (process.platform === 'linux' && appid !== 'default') {
       stdio: ['ignore', 'ignore', 'inherit'],
       detached: false,
     });
+    waylandProxyChild = child;
     child.on('error', err => process.stderr.write(`[pwa-wrapper] proxy: ${err}\n`));
 
     // Synchronous wait: poll until the proxy creates its socket (or 5 s timeout).
@@ -57,7 +73,13 @@ if (process.platform === 'linux' && appid !== 'default') {
   }
 }
 
-const { app, BrowserWindow, components, ipcMain, shell, WebContentsView } = require('electron');
+const { app, BaseWindow, components, ipcMain, shell, WebContentsView } = require('electron');
+
+function killWaylandProxy() {
+  if (waylandProxyChild && !waylandProxyChild.killed) waylandProxyChild.kill();
+}
+app.on('will-quit', killWaylandProxy);
+process.on('exit', killWaylandProxy);
 const os = require('os');
 
 const urlFilter = args['url-filter'] ? new RegExp(args['url-filter']) : null;
@@ -73,7 +95,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.on('second-instance', () => {
-  if (mainWin) {
+  if (mainWin && !mainWin.isDestroyed()) {
     if (mainWin.isMinimized()) mainWin.restore();
     if (!mainWin.isVisible()) mainWin.show();
     mainWin.focus();
@@ -92,6 +114,7 @@ const SCROLLBAR_CSS =
   'border:2px solid transparent;background-clip:content-box}' +
   '::-webkit-scrollbar-corner{background:transparent}';
 let mainWin = null;
+let titlebarView = null;
 let contentView = null;
 
 app.whenReady().then(async () => {
@@ -102,7 +125,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 
-// BrowserWindow.setBackgroundColor() only accepts hex; titlebar colors are
+// BaseWindow.setBackgroundColor() only accepts hex; titlebar colors are
 // produced as rgb()/rgba() (theme accent, custom app color) or already hex.
 function toHexColor(color) {
   if (typeof color !== 'string') return null;
@@ -138,21 +161,34 @@ async function createMainWindow() {
 
   const ses = setupSession(appid, args.useragent);
 
-  mainWin = new BrowserWindow({
+  // BaseWindow (not BrowserWindow) so there is no implicit, always-full-size
+  // root webContents. A BrowserWindow's own webContents view keeps occupying
+  // the whole window underneath contentView even once contentView is added
+  // as a child, and the two overlapping views is exactly the class of bug
+  // electron/electron#42922 describes as unsupported (focus and, we found
+  // separately, app-region drag-region hit-testing both bleed between
+  // overlapping WebContentsViews). Using BaseWindow with two *explicit*,
+  // non-overlapping child views (titlebarView above, contentView below)
+  // removes the overlap entirely instead of working around its symptoms.
+  mainWin = new BaseWindow({
     width: 1280, height: 800, minWidth: 400, minHeight: 300,
     frame: false,
     backgroundColor: '#18181f',
     show: false,
-    icon: args.icon || undefined,
+    icon: iconFsPath(args.icon) || undefined,
+  });
+
+  titlebarView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload-titlebar.js'),
       nodeIntegration: false, contextIsolation: true, sandbox: true,
     },
   });
+  titlebarView.setBackgroundColor('#18181f');
+  mainWin.contentView.addChildView(titlebarView);
+  titlebarView.webContents.loadFile(path.join(__dirname, 'titlebar.html'));
 
-  mainWin.loadFile(path.join(__dirname, 'titlebar.html'));
-
-  mainWin.webContents.on('did-finish-load', async () => {
+  titlebarView.webContents.on('did-finish-load', async () => {
     mainWin.setContentSize(1280, 800);
     if (!mainWin.isVisible()) {
       if (args.minimized && args.tray) { /* stay hidden, tray-only */ }
@@ -161,42 +197,54 @@ async function createMainWindow() {
     }
     updateContentBounds();
     const aurorae = await auroraeThemePromise;
-    if (mainWin && !mainWin.isDestroyed()) {
-      mainWin.webContents.send('titlebar-init', {
+    if (titlebarView && !titlebarView.webContents.isDestroyed()) {
+      titlebarView.webContents.send('titlebar-init', {
         name: args.name || '', color: args.color || null, icon: args.icon || null,
         aurorae,
       });
     }
   });
 
-  mainWin.on('focus', () => mainWin.webContents.send('focus-change', true));
-  mainWin.on('blur',  () => mainWin.webContents.send('focus-change', false));
+  mainWin.on('focus', () => {
+    titlebarView.webContents.send('focus-change', true);
+    // Deferred one tick: synchronously calling focus() here can still race
+    // Electron's own default-focus assignment among this window's sibling
+    // views (electron/electron#42922), separately from the drag-region
+    // overlap bug fixed by contentView/titlebarView no longer sharing
+    // screen space.
+    setImmediate(() => {
+      if (contentView && !contentView.webContents.isDestroyed()) contentView.webContents.focus();
+    });
+  });
+  mainWin.on('blur',  () => titlebarView.webContents.send('focus-change', false));
 
   contentView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'preload-content.js'),
       session: ses,
       nodeIntegration: false, contextIsolation: false, sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
   contentView.setBackgroundColor('#18181f');
   mainWin.contentView.addChildView(contentView);
   updateContentBounds();
+  contentView.webContents.focus();
 
   mainWin.on('resize', updateContentBounds);
   mainWin.on('resized', updateContentBounds);
   mainWin.on('maximize', () => {
     updateContentBounds();
-    mainWin.webContents.send('window-maximized', true);
+    titlebarView.webContents.send('window-maximized', true);
   });
   mainWin.on('unmaximize', () => {
     updateContentBounds();
-    mainWin.webContents.send('window-maximized', false);
+    titlebarView.webContents.send('window-maximized', false);
   });
 
   function applyFullscreen(isFullscreen) {
-    mainWin.webContents.send('fullscreen', isFullscreen);
+    titlebarView.webContents.send('fullscreen', isFullscreen);
     updateContentBounds();
   }
   mainWin.on('enter-full-screen', () => applyFullscreen(true));
@@ -207,8 +255,8 @@ async function createMainWindow() {
   contentView.webContents.on('leave-html-full-screen',  () => { if (mainWin.isFullScreen())  mainWin.setFullScreen(false); });
 
   function sendNavState() {
-    if (mainWin && !mainWin.isDestroyed()) {
-      mainWin.webContents.send('nav-state', {
+    if (titlebarView && !titlebarView.webContents.isDestroyed()) {
+      titlebarView.webContents.send('nav-state', {
         canGoBack:    contentView.webContents.canGoBack(),
         canGoForward: contentView.webContents.canGoForward(),
       });
@@ -250,14 +298,14 @@ async function createMainWindow() {
   });
 
   ipcMain.on('window-control', (event, action) => {
-    if (!mainWin) return;
+    if (!mainWin || mainWin.isDestroyed()) return;
     if (action === 'minimize') mainWin.minimize();
     else if (action === 'maximize') { if (mainWin.isMaximized()) mainWin.unmaximize(); else mainWin.maximize(); }
     else if (action === 'close') { if (args.tray) mainWin.hide(); else mainWin.close(); }
   });
 
   ipcMain.on('theme-color', (event, color) => {
-    if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('theme-color', color);
+    if (titlebarView && !titlebarView.webContents.isDestroyed()) titlebarView.webContents.send('theme-color', color);
   });
 
   ipcMain.on('titlebar-resize', (event, height) => {
@@ -281,10 +329,15 @@ async function createMainWindow() {
 }
 
 function updateContentBounds() {
-  if (!mainWin || !contentView) return;
+  if (!mainWin || !contentView || !titlebarView) return;
   const [w, h] = mainWin.getContentSize();
   const fs = mainWin.isFullScreen();
   const tbH = fs ? 0 : titlebarHeight;
+  // Both views are explicit children now (no implicit full-window root),
+  // so titlebarView needs its own bounds set here too -- previously this
+  // only sized contentView and titlebarView, as BrowserWindow's default
+  // webContents, silently covered the whole window underneath it.
+  titlebarView.setBounds({ x: 0, y: 0, width: w, height: tbH });
   contentView.setBounds({
     x: 0,
     y: tbH,
