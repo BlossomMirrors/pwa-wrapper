@@ -1,7 +1,6 @@
 ## What happened?
 
 <!-- Also tell us, what did you expect to happen? Tell us what you see! -->
-A bug happened!
 
 ## Version
 
@@ -27,4 +26,4 @@ A bug happened!
 
 <!-- If you have anything else tell us here -->
 
-/label ~bug
+/label ~Bug
